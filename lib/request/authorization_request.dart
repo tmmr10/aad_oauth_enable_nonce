@@ -51,10 +51,10 @@ class AuthorizationRequest {
           'code_challenge_method', () => config.codeChallengeMethod!);
     }
 
-    if (config.isB2C) {
+    //if (config.isB2C) {
       parameters.addAll({
         'nonce': config.nonce,
       });
-    }
+    //}
   }
 }
