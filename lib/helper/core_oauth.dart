@@ -3,7 +3,6 @@ import 'package:aad_oauth/helper/choose_oauth.dart'
     if (dart.library.io) 'package:aad_oauth/helper/mobile_oauth.dart'
     // ignore: uri_does_not_exist
     if (dart.library.html) 'package:aad_oauth/helper/web_oauth.dart';
-
 import 'package:aad_oauth/model/config.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/token.dart';
@@ -18,6 +17,8 @@ class CoreOAuth {
 
   Future<void> logout() async =>
       throw UnsupportedFailure(ErrorType.Unsupported, 'Unsupported logout');
+
+  Future<bool> get hasCachedAccountInformation async => false;
 
   Future<String?> getAccessToken() async => throw UnsupportedFailure(
       ErrorType.Unsupported, 'Unsupported getAccessToken');
@@ -41,6 +42,9 @@ class MockCoreOAuth extends CoreOAuth {
 
   @override
   Future<void> logout() async {}
+
+  @override
+  Future<bool> get hasCachedAccountInformation async => true;
 
   @override
   Future<String?> getAccessToken() async => mockAccessToken;
