@@ -1,14 +1,15 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 
-import 'request/authorization_request.dart';
-import 'model/config.dart';
+import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+
+import 'model/config.dart';
+import 'request/authorization_request.dart';
 
 class RequestCode {
   final Config _config;
   final AuthorizationRequest _authorizationRequest;
-  final _redirectUriHost;
+  final String _redirectUriHost;
   late NavigationDelegate _navigationDelegate;
   String? _code;
 
@@ -36,14 +37,34 @@ class RequestCode {
 
     final webView = WebViewWidget(controller: controller);
 
+    if (_config.navigatorKey.currentState == null) {
+      throw Exception(
+        'Could not push new route using provided navigatorKey, Because '
+        'NavigatorState returned from provided navigatorKey is null. Please Make sure '
+        'provided navigatorKey is passed to WidgetApp. This can also happen if at the time of this method call '
+        'WidgetApp is not part of the flutter widget tree',
+      );
+    }
+
     await _config.navigatorKey.currentState!.push(
       MaterialPageRoute(
         builder: (context) => Scaffold(
-            body: SafeArea(
-          child: Stack(
-            children: [_config.loader, webView],
+          appBar: _config.appBar,
+          body: WillPopScope(
+            onWillPop: () async {
+              if (await controller.canGoBack()) {
+                await controller.goBack();
+                return false;
+              }
+              return true;
+            },
+            child: SafeArea(
+              child: Stack(
+                children: [_config.loader, webView],
+              ),
+            ),
           ),
-        )),
+        ),
       ),
     );
     return _code;

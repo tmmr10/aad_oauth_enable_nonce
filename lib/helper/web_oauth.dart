@@ -41,6 +41,12 @@ external Object jsGetIdToken();
 @JS('hasCachedAccountInformation')
 external bool jsHasCachedAccountInformation();
 
+@JS('refreshToken')
+external void jsRefreshToken(
+  void Function(dynamic) onSuccess,
+  void Function(dynamic) onError,
+);
+
 class WebOAuth extends CoreOAuth {
   final Config config;
   WebOAuth(this.config) {
@@ -61,6 +67,8 @@ class WebOAuth extends CoreOAuth {
         clientSecret: config.clientSecret,
         resource: config.resource,
         isB2C: config.isB2C,
+        customAuthorizationUrl: config.customAuthorizationUrl,
+        customTokenUrl: config.customTokenUrl,
         loginHint: config.loginHint,
         domainHint: config.domainHint,
         codeVerifier: config.codeVerifier,
@@ -94,10 +102,26 @@ class WebOAuth extends CoreOAuth {
       refreshIfAvailable,
       config.webUseRedirect,
       allowInterop(
-          (_value) => completer.complete(Right(Token(accessToken: _value)))),
-      allowInterop((_error) => completer.complete(Left(AadOauthFailure(
-            ErrorType.AccessDeniedOrAuthenticationCanceled,
-            'Access denied or authentication canceled. Error: ${_error.toString()}',
+          (value) => completer.complete(Right(Token(accessToken: value)))),
+      allowInterop((error) => completer.complete(Left(AadOauthFailure(
+            ErrorType.accessDeniedOrAuthenticationCanceled,
+            'Access denied or authentication canceled. Error: ${error.toString()}',
+          )))),
+    );
+
+    return completer.future;
+  }
+
+  @override
+  Future<Either<Failure, Token>> refreshToken() {
+    final completer = Completer<Either<Failure, Token>>();
+
+    jsRefreshToken(
+      allowInterop(
+          (value) => completer.complete(Right(Token(accessToken: value)))),
+      allowInterop((error) => completer.complete(Left(AadOauthFailure(
+            ErrorType.accessDeniedOrAuthenticationCanceled,
+            'Access denied or authentication canceled. Error: ${error.toString()}',
           )))),
     );
 

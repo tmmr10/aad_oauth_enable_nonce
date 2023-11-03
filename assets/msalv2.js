@@ -16,7 +16,8 @@ var aadOauth = (function () {
      // TODO: Add support for other MSAL configuration
      var authData = {
          clientId: config.clientId,
-         authority: config.isB2C ? "https://" + config.tenant + ".b2clogin.com/" + config.tenant + ".onmicrosoft.com/" + config.policy + "/" : "https://login.microsoftonline.com/" + config.tenant,
+         authority: config.isB2C ? "https://" + config.tenant + ".b2clogin.com/tfp/" + config.tenant + ".onmicrosoft.com/" + config.policy + "/" : "https://login.microsoftonline.com/" + config.tenant,
+         knownAuthorities: [ config.tenant + ".b2clogin.com", "login.microsoftonline.com"],
          redirectUri: config.redirectUri,
      };
      var postLogoutRedirectUri = {
@@ -57,27 +58,28 @@ var aadOauth = (function () {
   // global authResult variable.
   async function silentlyAcquireToken() {
     const account = getAccount();
-
-    if (account !== null && authResult === null) {
-      try {
-        // Silent acquisition only works if the access token is either
-        // within its lifetime, or the refresh token can successfully be
-        // used to refresh it. This will throw if the access token can't
-        // be acquired.
-        const silentAuthResult = await myMSALObj.acquireTokenSilent({
-          scopes: tokenRequest.scopes,
-          prompt: "none",
-          account: account,
-          extraQueryParameters: tokenRequest.extraQueryParameters
-        });
-
-        authResult = silentAuthResult
-      } catch (error) {
-        console.log('Unable to silently acquire a new token: ' + error.message)
-      }
+    if (account == null) {
+      return null;
     }
 
-    return authResult
+    try {
+      // Silent acquisition only works if the access token is either
+      // within its lifetime, or the refresh token can successfully be
+      // used to refresh it. This will throw if the access token can't
+      // be acquired.
+      const silentAuthResult = await myMSALObj.acquireTokenSilent({
+        scopes: tokenRequest.scopes,
+        prompt: "none",
+        account: account,
+        extraQueryParameters: tokenRequest.extraQueryParameters
+      });
+
+      return  authResult = silentAuthResult;
+    } catch (error) {
+      console.log('Unable to silently acquire a new token: ' + error.message)
+      return null;
+    }
+
   }
 
   /// Authorize user via refresh token or web gui if necessary.
@@ -85,7 +87,7 @@ var aadOauth = (function () {
   /// Setting [refreshIfAvailable] to [true] should attempt to re-authenticate
   /// with the existing refresh token, if any, even though the access token may
   /// still be valid; however MSAL doesn't support this. Therefore it will have
-  /// the same impact as when it is set to [false]. 
+  /// the same impact as when it is set to [false].
   /// [useRedirect] uses the MSAL redirection based token acquisition instead of
   /// a popup window. This is the only way that iOS based devices will acquire
   /// a token using MSAL when the application is installed to the home screen.
@@ -126,7 +128,7 @@ var aadOauth = (function () {
     }
 
     const account = getAccount()
-      
+
     if (useRedirect) {
       myMSALObj.acquireTokenRedirect({
         scopes: tokenRequest.scopes,
@@ -136,7 +138,7 @@ var aadOauth = (function () {
       });
     } else {
       // Sign in with popup
-      try {        
+      try {
         const interactiveAuthResult = await myMSALObj.loginPopup({
           scopes: tokenRequest.scopes,
           prompt: tokenRequest.prompt,
@@ -152,6 +154,37 @@ var aadOauth = (function () {
         console.warn(error.message);
         onError(error);
       }
+    }
+  }
+
+  // Tries to refresh the token. Will call [onError] if a token
+  // could not be acquired or if no cached account credentials exist.
+  // Will call [onSuccess] on success and update the global authResult variable.
+  async function refreshToken(onSuccess, onError) {
+    try {
+      // The redirect handler task will complete with auth results if we
+      // were redirected from AAD. If not, it will complete with null
+      // We must wait for it to complete before we allow the login to
+      // attempt to acquire a token silently, and then progress to interactive
+      // login (if silent acquisition fails).
+      let result = await redirectHandlerTask;
+      if (result !== null) {
+        authResult = result;
+      }
+    }
+    catch (error) {
+      authResultError = error;
+      onError(authResultError);
+      return;
+    }
+
+    // Try to sign in silently, assuming we have already signed in and have
+    // a cached access token
+    await silentlyAcquireToken()
+
+    if(authResult != null) {
+      onSuccess(authResult.accessToken ?? null);
+      return
     }
   }
 
@@ -195,13 +228,13 @@ var aadOauth = (function () {
   }
 
   async function getAccessToken() {
-    await silentlyAcquireToken()
-    return authResult ? authResult.accessToken : null;
+    var result = await silentlyAcquireToken()
+    return result ? result.accessToken : null;
   }
 
   async function getIdToken() {
-    await silentlyAcquireToken()
-    return authResult ? authResult.idToken : null;
+    var result = await silentlyAcquireToken()
+    return result ? result.idToken : null;
   }
 
   function hasCachedAccountInformation() {
@@ -211,6 +244,7 @@ var aadOauth = (function () {
   return {
     init: init,
     login: login,
+    refreshToken: refreshToken,
     logout: logout,
     getIdToken: getIdToken,
     getAccessToken: getAccessToken,
